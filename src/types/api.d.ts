@@ -63,3 +63,27 @@ interface IResExportResources {
     path: string;
 }
 
+interface IExportOptions {
+    pageSize: string;
+    orientation: "portrait" | "landscape";
+    marginTop: number;
+    marginBottom: number;
+    marginLeft: number;
+    marginRight: number;
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    codeFontSize: number;
+    showToc: boolean;
+    pageHeader: boolean;
+    pageFooter: boolean;
+    customCSS: string;
+}
+
+interface IDocInfo {
+    id: string;
+    title: string;
+    hPath: string;
+    content: string;
+}
+

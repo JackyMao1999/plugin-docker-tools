@@ -1,0 +1,75 @@
+.plugin-doc-export__topbar {
+    cursor: pointer;
+}
+
+.plugin-doc-export__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--b3-theme-on-surface);
+}
+
+.plugin-doc-export__loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--b3-theme-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: plugin-doc-export-spin 0.8s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes plugin-doc-export-spin {
+    to { transform: rotate(360deg); }
+}
+
+.plugin-doc-export__batch-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.plugin-doc-export__batch-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.plugin-doc-export__batch-item:hover {
+    background: var(--b3-theme-surface-light);
+}
+
+.plugin-doc-export__batch-item input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.plugin-doc-export__batch-item .doc-title {
+    flex: 1;
+    font-size: 14px;
+}
+
+.plugin-doc-export__progress {
+    margin: 12px 0;
+}
+
+.plugin-doc-export__progress-bar {
+    height: 4px;
+    background: var(--b3-theme-surface);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.plugin-doc-export__progress-fill {
+    height: 100%;
+    background: var(--b3-theme-primary);
+    transition: width 0.3s ease;
+}
+
+.plugin-doc-export__progress-text {
+    font-size: 12px;
+    color: var(--b3-theme-on-surface-light);
+    margin-top: 4px;
+}

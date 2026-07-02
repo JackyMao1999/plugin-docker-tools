@@ -104,3 +104,20 @@ interface Window {
     };
     Lute: any;
 }
+
+interface ExportOptions {
+    pageSize: string;
+    orientation: "portrait" | "landscape";
+    marginTop: number;
+    marginBottom: number;
+    marginLeft: number;
+    marginRight: number;
+    fontFamily: string;
+    fontSize: number;
+    lineHeight: number;
+    codeFontSize: number;
+    showToc: boolean;
+    pageHeader: boolean;
+    pageFooter: boolean;
+    customCSS: string;
+}

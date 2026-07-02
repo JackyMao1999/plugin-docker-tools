@@ -1,8 +1,8 @@
 {
-  "name": "plugin-sample-vite",
-  "author": "frostime",
+  "name": "plugin-doc-export-tools",
+  "author": "siyuan-plugin",
   "url": "https://github.com/siyuan-note/plugin-sample-vite-svelte",
-  "version": "0.4.1",
+  "version": "1.0.0",
   "minAppVersion": "3.2.1",
   "backends": [
     "windows",
@@ -18,15 +18,16 @@
     "mobile",
     "browser-desktop",
     "browser-mobile",
-    "desktop-window"
+    "desktop-window",
+    "all"
   ],
   "displayName": {
-    "en_US": "Plugin sample with vite",
-    "zh_CN": "插件样例 vite 版"
+    "en_US": "Document Export Tools",
+    "zh_CN": "文档导出工具"
   },
   "description": {
-    "en_US": "SiYuan plugin sample with vite",
-    "zh_CN": "使用 vite 开发的思源插件样例"
+    "en_US": "Export documents as PDF with configurable formatting",
+    "zh_CN": "支持文档导出为 PDF 和格式化打印"
   },
   "readme": {
     "en_US": "README.md",
@@ -38,8 +39,10 @@
     ]
   },
   "keywords": [
-    "plugin",
-    "sample",
-    "插件样例"
+    "export",
+    "pdf",
+    "print",
+    "导出",
+    "打印"
   ]
 }
