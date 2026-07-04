@@ -1,6 +1,4 @@
 import { exportMdContent, getFileBlob } from "../api";
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 
 const DEFAULT_OPTIONS: ExportOptions = {
     pageSize: "A4",
@@ -17,8 +15,7 @@ const DEFAULT_OPTIONS: ExportOptions = {
     pageHeader: true,
     pageFooter: true,
     customCSS: "",
-    pdfImageQuality: 0.95,
-    pdfScale: 2,
+    exportMethod: "dom",
 };
 
 function getPageDimensions(pageSize: string, orientation: string): [number, number] {
@@ -63,41 +60,12 @@ async function inlineImages(element: HTMLElement): Promise<void> {
     await Promise.all(promises);
 }
 
-function renderMarkdown(markdown: string, title: string, options: ExportOptions, forPdf: boolean = false): string {
-    const Lute = (window as any).Lute;
-    let html = "";
-    if (Lute) {
-        const lute = Lute.New();
-        html = lute.Md2HTML(markdown);
-    } else {
-        html = "<pre>" + markdown + "</pre>";
-    }
-    const tocHtml = options.showToc ? '<nav class="toc"><h1>Table of Contents</h1><ul id="toc-list"></ul></nav>' : "";
-    return (
-        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title +
-        '</title><style>' + getPrintCSS(options, forPdf) + '</style></head><body>' +
-        '<div class="export-wrapper">' +
-        (options.pageHeader ? '<header class="export-header"><h1 class="doc-title">' + title + '</h1></header>' : "") +
-        tocHtml +
-        '<main class="export-content">' + html + '</main>' +
-        (options.pageFooter ? '<footer class="export-footer"><span class="page-number">Page <span class="page-num"></span></span></footer>' : "") +
-        '</div></body></html>'
-    );
-}
-
-function getPrintCSS(options: ExportOptions, forPdf: boolean = false): string {
+function getPrintCSS(options: ExportOptions): string {
     const [pageW, pageH] = getPageDimensions(options.pageSize, options.orientation);
-    const pageRule = forPdf
-        ? ""
-        : "@page { size: " + pageW + "mm " + pageH + "mm; margin: " + options.marginTop + "mm " + options.marginRight + "mm " + options.marginBottom + "mm " + options.marginLeft + "mm; }";
-    const bodyMarginRule = forPdf
-        ? "body { margin: " + options.marginTop + "mm " + options.marginRight + "mm " + options.marginBottom + "mm " + options.marginLeft + "mm; }"
-        : "";
     return [
-        pageRule,
-        bodyMarginRule,
+        "@page { size: " + pageW + "mm " + pageH + "mm; margin: " + options.marginTop + "mm " + options.marginRight + "mm " + options.marginBottom + "mm " + options.marginLeft + "mm; }",
         "* { box-sizing: border-box; }",
-        "body { font-family: " + options.fontFamily + "; font-size: " + options.fontSize + "pt; line-height: " + options.lineHeight + "; color: #333; background: white; }",
+        "body { font-family: " + options.fontFamily + "; font-size: " + options.fontSize + "pt; line-height: " + options.lineHeight + "; color: #333; background: white; margin: 0; }",
         ".export-wrapper { max-width: 100%; padding: 0; }",
         ".export-header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #333; margin-bottom: 30px; }",
         ".doc-title { font-size: " + (options.fontSize + 8) + "pt; font-weight: bold; margin: 0; color: #000; }",
@@ -128,48 +96,118 @@ function getPrintCSS(options: ExportOptions, forPdf: boolean = false): string {
     ].join("\n");
 }
 
-export async function printDoc(
-    docId: string,
-    options: ExportOptions
-): Promise<void> {
-    const res = await exportMdContent(docId);
-    if (!res) {
-        throw new Error("exportMdContent returned null for doc " + docId);
+function renderMarkdown(markdown: string, title: string, options: ExportOptions): string {
+    const Lute = (window as any).Lute;
+    let html = "";
+    if (Lute) {
+        const lute = Lute.New();
+        html = lute.Md2HTML(markdown);
+    } else {
+        html = "<pre>" + markdown + "</pre>";
     }
-    const hPath = res.hPath || "";
-    const title = hPath.split("/").pop() || "document";
-    const fullHtml = renderMarkdown(res.content || "", title, options);
+    const tocHtml = options.showToc ? '<nav class="toc"><h1>Table of Contents</h1><ul id="toc-list"></ul></nav>' : "";
+    return (
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title +
+        '</title><style>' + getPrintCSS(options) + '</style></head><body>' +
+        '<div class="export-wrapper">' +
+        (options.pageHeader ? '<header class="export-header"><h1 class="doc-title">' + title + '</h1></header>' : "") +
+        tocHtml +
+        '<main class="export-content">' + html + '</main>' +
+        (options.pageFooter ? '<footer class="export-footer"><span class="page-number">Page <span class="page-num"></span></span></footer>' : "") +
+        '</div></body></html>'
+    );
+}
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-        throw new Error("Failed to open print window");
-    }
+function cleanupProtyleDOM(root: HTMLElement): void {
+    root.classList.remove('protyle-wysiwyg--select');
+    root.querySelectorAll('[contenteditable]').forEach(el => {
+        el.removeAttribute('contenteditable');
+    });
+    root.querySelectorAll('[spellcheck]').forEach(el => {
+        el.removeAttribute('spellcheck');
+    });
+    root.querySelectorAll('.protyle-attr, .protyle-icons').forEach(el => {
+        el.remove();
+    });
+    root.innerHTML = root.innerHTML.replace(/\u200b/g, '');
+}
 
-    printWindow.document.write(fullHtml);
-    printWindow.document.title = title;
-    printWindow.document.close();
+function getStylesheetHTML(): string {
+    const tags: string[] = [];
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach(el => {
+        tags.push(el.outerHTML);
+    });
+    return tags.join('\n');
+}
 
-    await new Promise<void>((resolve) => {
-        printWindow.onload = () => {
-            const container = printWindow.document.querySelector(".export-wrapper") as HTMLElement;
-            if (container) {
-                inlineImages(container).then(() => {
-                    printWindow.print();
-                    resolve();
-                }).catch(() => {
-                    printWindow.print();
-                    resolve();
-                });
-            } else {
-                printWindow.print();
-                resolve();
+async function renderHtmlInIframe(fullHtml: string, title: string): Promise<void> {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;left:-9999px;top:0;width:1px;height:1px;border:none;';
+    document.body.appendChild(iframe);
+
+    const p = new Promise<void>((resolve) => {
+        iframe.onload = async () => {
+            const doc = iframe.contentDocument!;
+
+            // Strip @media screen wrappers so protyle styles apply in print
+            for (const sheet of doc.styleSheets) {
+                try {
+                    const rules = sheet.cssRules;
+                    const expansions: { index: number; css: string }[] = [];
+                    for (let i = 0; i < rules.length; i++) {
+                        const rule = rules[i];
+                        if (rule instanceof CSSMediaRule) {
+                            const media = rule.media.mediaText;
+                            if (media.includes('screen') && !media.includes('print') && !media.includes('all')) {
+                                const inner = [];
+                                for (let j = 0; j < rule.cssRules.length; j++) {
+                                    inner.push(rule.cssRules[j].cssText);
+                                }
+                                expansions.push({ index: i, css: inner.join('\n') });
+                            }
+                        }
+                    }
+                    for (let i = expansions.length - 1; i >= 0; i--) {
+                        const e = expansions[i];
+                        sheet.deleteRule(e.index);
+                        sheet.insertRule(e.css, e.index);
+                    }
+                } catch (e) {
+                    // skip
+                }
             }
+
+            // Wait for web fonts to load
+            try {
+                await doc.fonts.ready;
+            } catch (e) {
+                // fonts not supported
+            }
+
+            const container = doc.querySelector(".export-wrapper, .protyle-wysiwyg") as HTMLElement;
+            if (container) {
+                try {
+                    await inlineImages(container);
+                } catch (e) {
+                    console.warn("Image inlining failed:", e);
+                }
+            }
+            iframe.contentWindow!.onafterprint = () => {
+                document.body.removeChild(iframe);
+                resolve();
+            };
+            // Small delay for rendering to settle
+            setTimeout(() => iframe.contentWindow!.print(), 100);
         };
     });
 
-    printWindow.onafterprint = () => {
-        printWindow.close();
-    };
+    const doc = iframe.contentDocument!;
+    doc.open();
+    doc.write(fullHtml);
+    doc.title = title;
+    doc.close();
+
+    await p;
 }
 
 export async function exportToPdf(
@@ -182,67 +220,58 @@ export async function exportToPdf(
     }
     const hPath = res.hPath || "";
     const title = hPath.split("/").pop() || "document";
-    const fullHtml = renderMarkdown(res.content || "", title, options, true);
-
-    const [pageW, pageH] = getPageDimensions(options.pageSize, options.orientation);
-    const scale = options.pdfScale || 2;
-    const mmToPx = 96 / 25.4;
-    const pageWidthPx = Math.round(pageW * mmToPx);
-    const pageHeightPx = Math.round(pageH * mmToPx);
-
-    const container = document.createElement('div');
-    container.innerHTML = fullHtml;
-    container.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + pageWidthPx + 'px;';
-    document.body.appendChild(container);
-
-    await inlineImages(container);
-    await new Promise(r => setTimeout(r, 300));
-
-    const pdf = new jsPDF({
-        orientation: options.orientation === 'landscape' ? 'l' : 'p',
-        unit: 'mm',
-        format: options.pageSize.toLowerCase() as any,
-    });
-
-    const totalHeight = container.scrollHeight;
-    const numPages = Math.ceil(totalHeight / pageHeightPx);
-
-    for (let i = 0; i < numPages; i++) {
-        if (i > 0) pdf.addPage();
-
-        const pageWrapper = document.createElement('div');
-        pageWrapper.style.cssText = 'width:' + pageWidthPx + 'px;height:' + pageHeightPx + 'px;overflow:hidden;position:absolute;left:-9999px;top:0;';
-
-        const clone = container.cloneNode(true) as HTMLElement;
-        clone.style.cssText = 'position:relative;top:0;left:0;margin-top:-' + (i * pageHeightPx) + 'px;';
-        pageWrapper.appendChild(clone);
-        document.body.appendChild(pageWrapper);
-
-        const canvas = await html2canvas(pageWrapper, {
-            scale: scale,
-            useCORS: true,
-            logging: false,
-            width: pageWidthPx,
-            height: pageHeightPx,
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', options.pdfImageQuality || 0.95);
-        pdf.addImage(imgData, 'JPEG', 0, 0, pageW, pageH);
-        document.body.removeChild(pageWrapper);
-    }
-
-    pdf.save(title + '.pdf');
-    document.body.removeChild(container);
+    const fullHtml = renderMarkdown(res.content || "", title, options);
+    await renderHtmlInIframe(fullHtml, title);
 }
 
-export async function fetchDocContent(docId: string): Promise<{ content: string; title: string; hPath: string }> {
-    const res = await exportMdContent(docId);
-    if (!res) {
-        throw new Error("exportMdContent returned null for doc " + docId);
-    }
-    const hPath = res.hPath || "";
-    const title = hPath.split("/").pop() || "document";
-    return { content: res.content || "", title, hPath };
+export async function exportRenderedToPdf(
+    wysiwygElement: HTMLElement,
+    title: string,
+    options: ExportOptions
+): Promise<void> {
+    const clone = wysiwygElement.cloneNode(true) as HTMLElement;
+    cleanupProtyleDOM(clone);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'export-wrapper';
+    wrapper.appendChild(clone);
+
+    const [pageW, pageH] = getPageDimensions(options.pageSize, options.orientation);
+    const layoutCSS = [
+        "@page { size: " + pageW + "mm " + pageH + "mm; margin: " + options.marginTop + "mm " + options.marginRight + "mm " + options.marginBottom + "mm " + options.marginLeft + "mm; }",
+        "* { box-sizing: border-box; }",
+        ".export-wrapper { max-width: 100%; padding: 0; }",
+        options.pageHeader ? ".export-header { text-align: center; padding-bottom: 20px; border-bottom: 2px solid #333; margin-bottom: 30px; }" : "",
+        options.pageHeader ? ".doc-title { font-size: 24pt; font-weight: bold; margin: 0; color: #000; }" : "",
+        options.pageFooter ? ".export-footer { text-align: center; margin-top: 30px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 9pt; color: #666; }" : "",
+        "@media print { .export-footer .page-number:after { content: counter(page); } }",
+        options.customCSS || "",
+    ].filter(Boolean).join('\n');
+
+    const stylesheetHTML = getStylesheetHTML();
+    const baseHref = window.location.origin + '/';
+    const printOverrides = [
+        ':root { color-scheme: light; }',
+        'html, body { color-scheme: light; background: white !important; }',
+        '* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }',
+        '.protyle-wysiwyg .protyle-background { display: none !important; }',
+        '.protyle-wysiwyg [style*="background"] { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }',
+        '@media print {',
+        '  body { background: white !important; }',
+        '}',
+    ].join('\n');
+    const fullHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + title + '</title>' +
+        '<base href="' + baseHref + '">' +
+        stylesheetHTML +
+        '<style>' + layoutCSS + '</style>' +
+        '<style>' + printOverrides + '</style>' +
+        '</head><body>' +
+        (options.pageHeader ? '<header class="export-header"><h1 class="doc-title">' + title + '</h1></header>' : '') +
+        wrapper.outerHTML +
+        (options.pageFooter ? '<footer class="export-footer"><span class="page-number">Page <span class="page-num"></span></span></footer>' : '') +
+        '</body></html>';
+
+    await renderHtmlInIframe(fullHtml, title);
 }
 
 export { DEFAULT_OPTIONS };

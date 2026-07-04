@@ -120,8 +120,7 @@ interface ExportOptions {
     pageHeader: boolean;
     pageFooter: boolean;
     customCSS: string;
-    pdfImageQuality: number;
-    pdfScale: number;
+    exportMethod: "dom" | "markdown";
 }
 
 interface DocInfo {

@@ -47,5 +47,9 @@
     "pdfImageQuality": "PDF 图片质量",
     "pdfImageQualityDesc": "数值越高图片越清晰，文件越大",
     "pdfScale": "PDF 渲染精度",
-    "pdfScaleDesc": "缩放倍数越高越清晰，生成越慢"
+    "pdfScaleDesc": "缩放倍数越高越清晰，生成越慢",
+    "exportMethod": "导出方式",
+    "exportMethodDesc": "DOM 克隆（匹配编辑器显示）或 Markdown 转换",
+    "exportMethodDom": "克隆",
+    "exportMethodMd": "转换"
 }

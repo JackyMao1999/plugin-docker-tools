@@ -9,8 +9,7 @@ import {
 import "./index.scss";
 import "./export-styles.scss";
 import { SettingUtils } from "./libs/setting-utils";
-import { printDoc, exportToPdf, DEFAULT_OPTIONS, fetchDocContent } from "./libs/export-utils";
-import { showBatchExportDialog } from "./libs/batch-export";
+import { exportToPdf, exportRenderedToPdf, DEFAULT_OPTIONS } from "./libs/export-utils";
 
 const STORAGE_NAME = "doc-export-config";
 
@@ -59,7 +58,7 @@ export default class DocExportPlugin extends Plugin {
                 langKey: "printDoc",
                 hotkey: "⌃⌥P",
                 callback: () => {
-                    this.handlePrint().catch(e => console.error("printDoc failed:", e));
+                    this.handleExportPdf().catch(e => console.error("exportPdf failed:", e));
                 },
             });
 
@@ -244,28 +243,18 @@ export default class DocExportPlugin extends Plugin {
         });
 
         this.settingUtils.addItem({
-            key: "pdfImageQuality",
-            value: DEFAULT_OPTIONS.pdfImageQuality,
-            type: "slider",
-            title: this.i18n.pdfImageQuality,
-            description: this.i18n.pdfImageQualityDesc,
-            slider: { min: 0.5, max: 1.0, step: 0.05 },
-            action: { callback: () => this.settingUtils.takeAndSave("pdfImageQuality") }
+            key: "exportMethod",
+            value: DEFAULT_OPTIONS.exportMethod,
+            type: "select",
+            title: this.i18n.exportMethod,
+            description: this.i18n.exportMethodDesc,
+            options: {
+                "dom": "DOM " + (this.i18n.exportMethodDom || "Clone"),
+                "markdown": "Markdown " + (this.i18n.exportMethodMd || "Convert")
+            },
+            action: { callback: () => this.settingUtils.takeAndSave("exportMethod") }
         });
 
-        this.settingUtils.addItem({
-            key: "pdfScale",
-            value: DEFAULT_OPTIONS.pdfScale,
-            type: "select",
-            title: this.i18n.pdfScale,
-            description: this.i18n.pdfScaleDesc,
-            options: {
-                "1": "1x",
-                "2": "2x",
-                "3": "3x"
-            },
-            action: { callback: () => this.settingUtils.takeAndSave("pdfScale") }
-        });
     }
 
     private getOptions(): ExportOptions {
@@ -284,8 +273,7 @@ export default class DocExportPlugin extends Plugin {
             pageHeader: Boolean(this.settingUtils.get("pageHeader")) || DEFAULT_OPTIONS.pageHeader,
             pageFooter: Boolean(this.settingUtils.get("pageFooter")) || DEFAULT_OPTIONS.pageFooter,
             customCSS: this.settingUtils.get("customCSS") || DEFAULT_OPTIONS.customCSS,
-            pdfImageQuality: Number(this.settingUtils.get("pdfImageQuality")) || DEFAULT_OPTIONS.pdfImageQuality,
-            pdfScale: Number(this.settingUtils.get("pdfScale")) || DEFAULT_OPTIONS.pdfScale,
+            exportMethod: (this.settingUtils.get("exportMethod") as "dom" | "markdown") || DEFAULT_OPTIONS.exportMethod,
         };
     }
 
@@ -295,19 +283,13 @@ export default class DocExportPlugin extends Plugin {
             icon: "iconPrint",
             label: this.i18n.printDoc,
             accelerator: adaptHotkey("⌃⌥P"),
-            click: () => this.handlePrint().catch(e => console.error("Print failed:", e))
+            click: () => this.handleExportPdf().catch(e => console.error("Export failed:", e))
         });
         menu.addItem({
             icon: "iconPDF",
             label: this.i18n.exportPdf,
             accelerator: adaptHotkey("⌃⌥D"),
             click: () => this.handleExportPdf().catch(e => console.error("PDF export failed:", e))
-        });
-        menu.addSeparator();
-        menu.addItem({
-            icon: "iconBatch",
-            label: this.i18n.batchExport,
-            click: () => this.handleBatchExport().catch(e => console.error("Batch export failed:", e))
         });
         menu.addSeparator();
         menu.addItem({
@@ -347,48 +329,30 @@ export default class DocExportPlugin extends Plugin {
         return null;
     }
 
-    private async handlePrint() {
-        const editor = this.getEditor();
-        if (!editor) return;
-
-        const docId = editor.protyle.block.rootID;
-        const options = this.getOptions();
-
-        try {
-            await printDoc(docId, options);
-        } catch (e) {
-            console.error("Print failed:", e);
-            showMessage(this.i18n.printFailed, 5000);
-        }
-    }
-
     private async handleExportPdf() {
         const editor = this.getEditor();
         if (!editor) return;
 
-        const docId = editor.protyle.block.rootID;
         const options = this.getOptions();
+        const docId = editor.protyle.block.rootID;
+
+        if (options.exportMethod === 'dom') {
+            const wysiwyg = editor.protyle.wysiwyg?.element;
+            if (wysiwyg && wysiwyg.children.length > 0) {
+                const title = editor.protyle.title?.element?.textContent?.trim() || 'document';
+                try {
+                    await exportRenderedToPdf(wysiwyg, title, options);
+                    return;
+                } catch (e) {
+                    console.warn("DOM export failed, falling back to Markdown:", e);
+                }
+            }
+        }
 
         try {
-            showMessage(this.i18n.exportStarted, 3000);
             await exportToPdf(docId, options);
         } catch (e) {
             console.error("PDF export failed:", e);
-            showMessage(this.i18n.printFailed, 5000);
-        }
-    }
-
-    private async handleBatchExport() {
-        const options = this.getOptions();
-        try {
-            await showBatchExportDialog({
-                plugin: this,
-                options,
-                fetchDocContent,
-                exportToPdf,
-            });
-        } catch (e) {
-            console.error("Batch export failed:", e);
             showMessage(this.i18n.printFailed, 5000);
         }
     }

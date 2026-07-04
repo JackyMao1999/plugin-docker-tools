@@ -47,5 +47,9 @@
     "pdfImageQuality": "PDF Image Quality",
     "pdfImageQualityDesc": "Higher values mean sharper images, larger files",
     "pdfScale": "PDF Render Scale",
-    "pdfScaleDesc": "Higher scale gives sharper output but slower generation"
+    "pdfScaleDesc": "Higher scale gives sharper output but slower generation",
+    "exportMethod": "Export Method",
+    "exportMethodDesc": "DOM Clone (matches editor) or Markdown Convert",
+    "exportMethodDom": "Clone",
+    "exportMethodMd": "Convert"
 }
