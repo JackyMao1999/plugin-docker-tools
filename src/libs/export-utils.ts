@@ -1,4 +1,4 @@
-import { exportMdContent, getFileBlob, sql } from "../api";
+import { exportMdContent, sql } from "../api";
 
 const DEFAULT_OPTIONS: ExportOptions = {
     pageSize: "A4",
@@ -42,14 +42,9 @@ async function inlineImages(element: HTMLElement): Promise<void> {
         if (!src || src.startsWith("data:")) return;
         const promise = (async () => {
             try {
-                const blob = await getFileBlob(src);
+                const blob = await getAssetBlob(src);
                 if (blob) {
-                    const dataUrl = await new Promise<string>((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result as string);
-                        reader.readAsDataURL(blob);
-                    });
-                    img.setAttribute("src", dataUrl);
+                    img.setAttribute("src", await blobToDataUrl(blob));
                 }
             } catch (e) {
                 console.warn("Failed to inline image:", src, e);
@@ -69,6 +64,44 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     });
 }
 
+async function getAssetBlob(src: string): Promise<Blob | null> {
+    try {
+        const path = src.startsWith('/') ? src.slice(1) : src;
+        const url = new URL(path, window.location.origin).href;
+        const response = await fetch(url);
+        if (response.ok) return await response.blob();
+        console.warn("getAssetBlob failed:", url, response.status);
+    } catch (e) {
+        console.warn("Failed to fetch asset:", src, e);
+    }
+    return null;
+}
+
+async function preprocessMarkdownImages(markdown: string): Promise<string> {
+    const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    const cache = new Map<string, string>();
+    const uniqueSrcs = new Set<string>();
+    let match: RegExpExecArray | null;
+    while ((match = imgRegex.exec(markdown)) !== null) {
+        uniqueSrcs.add(match[2]);
+    }
+    if (uniqueSrcs.size === 0) return markdown;
+
+    await Promise.all([...uniqueSrcs].map(async (src) => {
+        try {
+            const blob = await getAssetBlob(src);
+            if (blob) cache.set(src, await blobToDataUrl(blob));
+        } catch (e) {
+            console.warn("Failed to preprocess image:", src, e);
+        }
+    }));
+
+    return markdown.replace(imgRegex, (m, alt, src) => {
+        const dataUrl = cache.get(src);
+        return dataUrl ? `![${alt}](${dataUrl})` : m;
+    });
+}
+
 async function fetchDocumentImages(docId: string): Promise<Map<string, string>> {
     const rows = await sql(
         `SELECT markdown FROM blocks WHERE root_id = '${docId}' AND subtype = 'image'`
@@ -84,14 +117,7 @@ async function fetchDocumentImages(docId: string): Promise<Map<string, string>> 
     const result = new Map<string, string>();
     await Promise.all([...paths].map(async (path) => {
         try {
-            const variants = [path];
-            if (!path.startsWith('/')) variants.push('/' + path);
-            else variants.push(path.slice(1));
-            let blob: Blob | null = null;
-            for (const p of variants) {
-                blob = await getFileBlob(p);
-                if (blob) break;
-            }
+            const blob = await getAssetBlob(path);
             if (blob) result.set(path, await blobToDataUrl(blob));
         } catch (e) {
             console.warn("Failed to fetch image block:", path, e);
@@ -102,45 +128,10 @@ async function fetchDocumentImages(docId: string): Promise<Map<string, string>> 
 
 function replaceImageSrcInHtml(html: string, imageMap: Map<string, string>): string {
     return html.replace(/<img\s+[^>]*src="([^"]+)"[^>]*>/g, (match, src) => {
-        const candidates = [src];
-        if (!src.startsWith('/')) candidates.push('/' + src);
-        else candidates.push(src.slice(1));
-        for (const c of candidates) {
-            if (imageMap.has(c)) return match.replace(`src="${src}"`, `src="${imageMap.get(c)}"`);
+        if (!src.startsWith('data:') && imageMap.has(src)) {
+            return match.replace(`src="${src}"`, `src="${imageMap.get(src)}"`);
         }
         return match;
-    });
-}
-
-async function preprocessMarkdownImages(markdown: string): Promise<string> {
-    const imgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-    const cache = new Map<string, string>();
-    const uniqueSrcs = new Set<string>();
-    let match: RegExpExecArray | null;
-    while ((match = imgRegex.exec(markdown)) !== null) {
-        uniqueSrcs.add(match[2]);
-    }
-    if (uniqueSrcs.size === 0) return markdown;
-
-    await Promise.all([...uniqueSrcs].map(async (src) => {
-        try {
-            const pathsToTry = [src];
-            if (!src.startsWith('/')) pathsToTry.push('/' + src);
-            else pathsToTry.push(src.slice(1));
-            let blob: Blob | null = null;
-            for (const p of pathsToTry) {
-                blob = await getFileBlob(p);
-                if (blob) break;
-            }
-            if (blob) cache.set(src, await blobToDataUrl(blob));
-        } catch (e) {
-            console.warn("Failed to preprocess image:", src, e);
-        }
-    }));
-
-    return markdown.replace(imgRegex, (m, alt, src) => {
-        const dataUrl = cache.get(src);
-        return dataUrl ? `![${alt}](${dataUrl})` : m;
     });
 }
 
@@ -300,18 +291,19 @@ export async function exportToPdf(
     options: ExportOptions
 ): Promise<void> {
     const res = await exportMdContent(docId);
-    if (!res) {
-        throw new Error("exportMdContent returned null for doc " + docId);
-    }
+    if (!res) throw new Error("exportMdContent returned null for doc " + docId);
     const hPath = res.hPath || "";
     const title = hPath.split("/").pop() || "document";
 
-    const imageMap = await fetchDocumentImages(docId);
     const content = await preprocessMarkdownImages(res.content || "");
+
     let fullHtml = renderMarkdown(content, title, options);
+
+    const imageMap = await fetchDocumentImages(docId);
     if (imageMap.size > 0) {
         fullHtml = replaceImageSrcInHtml(fullHtml, imageMap);
     }
+
     await renderHtmlInIframe(fullHtml, title);
 }
 
