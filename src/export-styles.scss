@@ -45,6 +45,7 @@
     font-size: 11pt;
 }
 
+@media print {
 /* Protyle 样式兼容 */
 .protyle-wysiwyg {
     max-width: 100%;
@@ -192,6 +193,14 @@
     font-size: 9pt;
 }
 
+/* 块级数学公式 */
+.protyle-wysiwyg [custom-af] {
+    display: block;
+    text-align: center;
+    margin: 10px 0;
+}
+}
+
 /* TOC */
 .toc {
     page-break-after: always;
@@ -217,11 +226,4 @@
 .toc a {
     text-decoration: none;
     color: #333;
-}
-
-/* 块级数学公式 */
-.protyle-wysiwyg [custom-af] {
-    display: block;
-    text-align: center;
-    margin: 10px 0;
 }
